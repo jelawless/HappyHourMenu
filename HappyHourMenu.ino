@@ -37,6 +37,16 @@ String readFile(const char* path) {
   content.trim();
   return content;
 }
+void writeFile(const char* path, const String& message) {
+  File file = LittleFS.open(path, "w");
+  if (!file) {
+    Serial.printf("❌ Failed to open %s for writing\n", path);
+    return;
+  }
+  file.print(message);
+  file.close();
+  Serial.printf("✅ Saved to %s: %s\n", path, message.c_str());
+}
 
 int centerText(const char *text, const GFXfont *font) {
   display.setFont(font);
@@ -117,22 +127,18 @@ void setup() {
       f.close();
     });
 
-    // Endpoints to save posted text
-    server.on("/saveBeer", HTTP_POST, []() { 
-      File f = LittleFS.open("/beer.txt", "w");
-      if (!f) { server.send(500, "text/plain", "failed to open beer.txt"); return; }
-      f.print(server.arg("plain"));
-      f.close();
-      drawHappyHourMenu();            // refresh display immediately
-      server.send(200, "text/plain", "Saved");
-    });
-    server.on("/saveFood", HTTP_POST, []() { 
-      File f = LittleFS.open("/food.txt", "w");
-      if (!f) { server.send(500, "text/plain", "failed to open food.txt"); return; }
-      f.print(server.arg("plain"));
-      f.close();
-      drawHappyHourMenu();            // refresh display immediately
-      server.send(200, "text/plain", "Saved");
+    server.on("/update", HTTP_POST, []() {
+      String beer = server.arg("beer");
+      String food = server.arg("food");
+
+      // Save to LittleFS
+      writeFile("/beer.txt", beer);
+      writeFile("/food.txt", food);
+
+      // Refresh display
+      drawHappyHourMenu();
+
+      server.send(200, "text/plain", "Saved & updated!");
     });
 
     server.begin();
@@ -176,38 +182,6 @@ void loop() {
 
 // --- Display Function ---
 void drawHappyHourMenu() {
-  Serial.println("🔍 Debugging file reads...");
-
-  File beer = LittleFS.open("/beer.txt", "r");
-  if (!beer) {
-    Serial.println("⚠️ Could not open /beer.txt");
-  } else {
-    Serial.println("✅ Opened /beer.txt");
-    Serial.println("Contents:");
-    while (beer.available()) {
-      String line = beer.readStringUntil('\n');
-      line.trim();
-      Serial.println(line);
-    }
-    beer.close();
-  }
-
-  File food = LittleFS.open("/food.txt", "r");
-  if (!food) {
-    Serial.println("⚠️ Could not open /food.txt");
-  } else {
-    Serial.println("✅ Opened /food.txt");
-    Serial.println("Contents:");
-    while (food.available()) {
-      String line = food.readStringUntil('\n');
-      line.trim();
-      Serial.println(line);
-    }
-    food.close();
-  }
-
-  Serial.println("🔍 End of debug output.\n");
-
   String beerMenu = readFile("/beer.txt");
   String foodMenu = readFile("/food.txt");
 
@@ -225,29 +199,23 @@ void drawHappyHourMenu() {
 
     display.drawLine(20, 50, 380, 50, GxEPD_BLACK);
 
-    // --- Happy Hour ---
-    const char *timeText = "Happy Hour: 3 PM - 6 PM";
-    const char *daysText = "Mon - Fri Only";
-    int x_time = centerText(timeText, &FreeMonoBold9pt7b);
-    int x_days = centerText(daysText, &FreeMonoBold9pt7b);
-
+    // --- Happy Hour Single Line ---
+    const char *happyHour = "Happy Hour: 3PM - 6PM Mon - Fri Only";
+    int x_happy = centerText(happyHour, &FreeMonoBold9pt7b);
     display.setFont(&FreeMonoBold9pt7b);
-    display.setCursor(x_time, 75);
-    display.print(timeText);
+    display.setCursor(x_happy, 75);
+    display.print(happyHour);
 
-    display.setCursor(x_days, 95);
-    display.print(daysText);
-
-    // --- Beers ---
-    display.drawRoundRect(20, 110, 170, 160, 6, GxEPD_BLACK);
+    // --- Beer Box (taller & higher text start) ---
+    display.drawRoundRect(20, 90, 170, 185, 6, GxEPD_BLACK); 
     display.setFont(&FreeSans9pt7b);
-    display.setCursor(45, 130);
+    display.setCursor(40, 115);
     display.print("Draft Beers - $4");
 
     display.setFont();
     if (beerMenu.length() > 0) {
-      int y = 155;
-      int lineHeight = 20;
+      int y = 130;              // raised starting point
+      int lineHeight = 18;      // slightly tighter spacing
       int start = 0, end;
       while ((end = beerMenu.indexOf('\n', start)) != -1) {
         String line = beerMenu.substring(start, end);
@@ -261,20 +229,20 @@ void drawHappyHourMenu() {
         display.print(beerMenu.substring(start));
       }
     } else {
-      display.setCursor(30, 155);
+      display.setCursor(30, 140);
       display.print("No beer menu found");
     }
 
-    // --- Food ---
-    display.drawRoundRect(210, 110, 170, 160, 6, GxEPD_BLACK);
+    // --- Food Box (taller & higher text start) ---
+    display.drawRoundRect(210, 90, 170, 185, 6, GxEPD_BLACK);
     display.setFont(&FreeSans9pt7b);
-    display.setCursor(240, 130);
+    display.setCursor(235, 115);
     display.print("Food Specials");
 
     display.setFont();
     if (foodMenu.length() > 0) {
-      int y = 155;
-      int lineHeight = 20;
+      int y = 130;
+      int lineHeight = 18;
       int start = 0, end;
       while ((end = foodMenu.indexOf('\n', start)) != -1) {
         String line = foodMenu.substring(start, end);
@@ -288,17 +256,12 @@ void drawHappyHourMenu() {
         display.print(foodMenu.substring(start));
       }
     } else {
-      display.setCursor(220, 155);
+      display.setCursor(220, 140);
       display.print("No food menu found");
     }
 
-    display.drawLine(20, 275, 380, 275, GxEPD_BLACK);
-
-    const char *footer = "CHEERS!";
-    int x_footer = centerText(footer, &FreeMonoBold9pt7b);
-    display.setFont(&FreeMonoBold9pt7b);
-    display.setCursor(x_footer, 295);
-    display.print(footer);
+    // Removed "CHEERS!" footer ✅
 
   } while (display.nextPage());
 }
+
