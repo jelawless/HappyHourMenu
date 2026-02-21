@@ -63,4 +63,4 @@ Before compiling, ensure you have the following installed in your Arduino IDE:
 
 ## ❤️ Support
 Thank you for checking out HappyHourMenu! If you find it useful for your bar or next party, consider giving it a ⭐ star on GitHub!
-```
+
